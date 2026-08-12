@@ -1,0 +1,25 @@
+# generated map output
+build/
+candidates/
+
+# vendored upstream
+third_party/
+
+# python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# read-only snapshots of game/corpus reference data (large, redistribution-restricted)
+reference/corpus/
+reference/stock/
+
+
+# os
+.DS_Store
+
+# Skippy runtime bookkeeping — never tracked
+.skippy/
+bzmap.egg-info/

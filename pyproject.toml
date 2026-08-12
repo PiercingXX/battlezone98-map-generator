@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bzmap"
+version = "0.1.0"
+description = "Battlezone 98 Redux map generator toolchain"
+authors = [{ name = "Skippy" }]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "Pillow",
+    "imageio",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+include = ["bzmap*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+# Vendored third-party code (Battlezone98Redux_WorldBuilder) is upstream's
+# source, not ours — never lint it. It is a monolithic GUI file that does not
+# follow this repo's style and its module names are mandated by the task spec.
+extend-exclude = ["third_party"]
+
+[tool.ruff.lint.per-file-ignores]
+# Also ignore when ruff is pointed at a vendored file explicitly (explicit
+# paths bypass `extend-exclude`).
+"third_party/**" = ["ALL"]
