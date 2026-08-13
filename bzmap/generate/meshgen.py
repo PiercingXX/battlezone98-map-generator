@@ -25,29 +25,28 @@ from bzmap.formats.mesh import write_mesh
 _WATER_MATERIAL = """\
 import * from "BZBase.material"
 
+// The water pass shipped community maps use, and the look play-testing
+// settled on: a blue additive wash over a scrolling ripple texture.
+// depth_write OFF makes the pool genuinely see-through; fog_override keeps
+// distant water from tinting toward the fog colour. Deepen or lighten the
+// blue by scaling ambient/diffuse together.
 material {name}
 {{
 \ttechnique
 \t{{
 \t\tpass
 \t\t{{
-\t\t\t// lighting OFF so the trench shadow can't darken it, and the colour is
-\t\t\t// FORCED bright blue by ADDING a manual blue to the texture (the water
-\t\t\t// texture is dark; MODULATING by it rendered the water near-black). The
-\t\t\t// texture only adds animated ripple detail on top of the blue base.
-\t\t\t// depth_write ON + 0.8 alpha so it reads as a filled channel.
-\t\t\tlighting off
-\t\t\tscene_blend alpha_blend
+\t\t\tambient 0.12 0.35 0.80
+\t\t\tdiffuse 0.12 0.35 0.80
+\t\t\tscene_blend add
 \t\t\tcull_hardware none
 \t\t\tcull_software none
-\t\t\tdepth_write on
+\t\t\tdepth_write off
 \t\t\tfog_override true
 \t\t\ttexture_unit
 \t\t\t{{
 \t\t\t\ttexture thecavew.png
-\t\t\t\tscroll_anim 0.03 0.05
-\t\t\t\tcolour_op_ex add src_texture src_manual 0.10 0.40 0.85
-\t\t\t\talpha_op_ex source1 src_manual src_current 0.80
+\t\t\t\tscroll_anim 0.0 0.04
 \t\t\t}}
 \t\t}}
 \t}}
@@ -178,7 +177,16 @@ def build_water_surface(out_dir, stem, heightmap, water_level_m, *,
     _write_material(out_dir / f"{stem}.material", _WATER_MATERIAL, material)
     _write_static_odf(out_dir / f"{stem}.odf", f"{stem} water")
     # The submesh material name must match the .material's material name.
-    write_mesh(out_dir / f"{stem}.mesh", verts, norms, uvs, tris, material)
+    # Mesh-local vertices are the TRANSPOSE of world coordinates (x<->z):
+    # the engine applies the carrier object's transform basis and then
+    # NEGATES Z (a handedness flip no pure-rotation basis can cancel,
+    # det -1). Shipped maps therefore pair a -90-degree carrier basis
+    # (right=(7.54979e-008, 0, -1), front=(1, 0, 7.54979e-008), posit 0)
+    # with transposed vertices: local (wz, y, wx) lands at world (wx, wz).
+    # Verified in-game: world-coordinate verts render transposed (a
+    # symmetric ring sits in place while an N-S strip comes out E-W).
+    write_mesh(out_dir / f"{stem}.mesh", [(z, y, x) for (x, y, z) in verts],
+               norms, uvs, tris, material)
     return stem
 
 
@@ -261,5 +269,7 @@ def build_plant_field(out_dir, stem, heightmap, *, seed, count=260,
 
     _write_material(out_dir / f"{stem}.material", _PLANT_MATERIAL, material)
     _write_static_odf(out_dir / f"{stem}.odf", f"{stem} plants")
-    write_mesh(out_dir / f"{stem}.mesh", verts, norms, uvs, tris, material)
+    # Transposed local frame — see the identical note in build_water_surface.
+    write_mesh(out_dir / f"{stem}.mesh", [(z, y, x) for (x, y, z) in verts],
+               norms, uvs, tris, material)
     return stem

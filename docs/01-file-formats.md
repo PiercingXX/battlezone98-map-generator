@@ -104,10 +104,20 @@ Dimensions **must be multiples of 1280** (`MakeTRN` enforces this). Non-square i
 
 ---
 
-## 2. `.MAT` — material grid **[MOSTLY INFERRED]**
+## 2. `.MAT` — material grid **[MOSTLY INFERRED — layout RESOLVED]**
 
 `(width_m / 20) × (depth_m / 20)` uint16 values — one per 20 m tile, i.e. one material
 tile per 4×4 heightmap cells. Byte counts verified against all five sizes above.
+
+**The data is zone-major, exactly like the HG2**: 64×64 tile blocks per zone, zones in
+row-major order; within each zone the tiles are row-major. Verified against every
+multi-zone map in the reference corpus (the zone-major decode is seam-coherent at each
+64-tile boundary; a flat decode shows 3–15× discontinuity spikes exactly at the seams),
+and the identity orientation within zones wins a texture-type-vs-terrain correlation
+test decisively. An earlier revision claimed the grid was one flat array — single-zone
+(1280 m) maps are identical under both layouts, which hid the error until the first
+multi-zone generated map reached the game and its textures rendered scrambled
+(displaced quadrant stripes and blank-white tiles).
 
 Encoding, inferred from value distributions on `uexmap10`:
 

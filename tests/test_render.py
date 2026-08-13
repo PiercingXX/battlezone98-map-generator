@@ -95,8 +95,10 @@ def test_draw_regions_tints_pixels():
     pv.draw_regions([mask], color=(0, 255, 0), alpha=80)
     after = np.asarray(pv.image)
     assert not np.array_equal(before, after)
-    # Green channel is boosted inside the tinted half.
-    assert after[10, 10, 1] > before[10, 10, 1]
+    # The image is north-up (+z at the top), so the tinted LOW-z half is the
+    # BOTTOM of the image; the top stays untinted.
+    assert after[54, 10, 1] > before[54, 10, 1]
+    assert after[10, 10, 1] == before[10, 10, 1]
 
 
 def test_draw_regions_rejects_wrong_shape():

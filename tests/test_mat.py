@@ -58,6 +58,27 @@ def test_roundtrip_byte_identical(tmp_path):
         assert out.read_bytes() == original
 
 
+def test_disk_layout_is_zone_major(tmp_path):
+    """The on-disk MAT is 64x64 zone blocks, like the HG2 — not one flat grid.
+
+    Verified against all 13 multi-zone corpus MATs (zone-major decode is
+    seam-coherent at every 64-tile boundary; flat decode is not). Shipping a
+    flat 128x128 dump made the engine scramble xxPier02's terrain textures
+    into displaced quadrant stripes (playtested 2026-08-12).
+    """
+    grid = np.arange(128 * 128, dtype=np.uint16).reshape(128, 128)
+    path = tmp_path / "two_zone.mat"
+    MaterialGrid(grid).write(path)
+    raw = np.fromfile(path, dtype=np.uint16)
+
+    # first 64*64 entries on disk are the NW zone block, not the first 32 rows
+    assert np.array_equal(raw[:64 * 64].reshape(64, 64), grid[:64, :64])
+    # second block is the NE zone
+    assert np.array_equal(raw[64 * 64:2 * 64 * 64].reshape(64, 64), grid[:64, 64:])
+    # and reading it back undoes the zoning
+    assert np.array_equal(read_mat(path).data, grid)
+
+
 def test_mat_grid_size_matches_docs(tmp_path):
     """A 1x1-zone (1280 m) map has a 64x64 MAT grid (8192 bytes)."""
     path = tmp_path / "map.mat"

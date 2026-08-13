@@ -48,8 +48,11 @@ def render_heightmap(heightmap, size=None):
     """Render a hillshaded, height-coloured top-down ``PIL.Image`` (RGB).
 
     ``size`` is ``(width, height)`` in pixels; defaults to the full grid
-    resolution ``(grid_x, grid_z)``. The image is oriented so world ``+x``
-    points right and world ``+z`` points down.
+    resolution ``(grid_x, grid_z)``. The image is oriented **north-up**: world
+    ``+x`` points right and world ``+z`` points UP — matching the game's own
+    map images. (Measured against the corpus BMPs: on the asymmetric maps the
+    community-authored thumbnails are the vertical mirror of a z-down render,
+    so z-down was upside down versus what players see in the shell.)
     """
     if size is None:
         size = (heightmap.grid_x, heightmap.grid_z)
@@ -75,21 +78,24 @@ def render_heightmap(heightmap, size=None):
     idx = ((raw - lo) / span * 255.0).astype(np.uint8)
     colour = _terrain_colormap()[idx]
 
-    # Combine: colour scaled by the shade factor.
-    shaded = (colour * shade[..., None]).astype(np.uint8)
+    # Combine: colour scaled by the shade factor, flipped so +z is UP.
+    shaded = np.flipud((colour * shade[..., None]).astype(np.uint8))
 
     # Downscale/upscale from grid resolution to the requested pixel size.
-    img = Image.fromarray(shaded, "RGB")
+    img = Image.fromarray(np.ascontiguousarray(shaded), "RGB")
     if (w, h) != (heightmap.grid_x, heightmap.grid_z):
         img = img.resize((w, h), Image.BILINEAR)
     return img
 
 
 def _world_to_px(heightmap, size, x, z):
-    """Map world metres ``(x, z)`` to pixel ``(col, row)`` in a ``size`` image."""
+    """Map world metres ``(x, z)`` to pixel ``(col, row)`` in a ``size`` image.
+
+    North-up: ``z = 0`` is the BOTTOM row, matching :func:`render_heightmap`.
+    """
     w, h = size
     col = x / heightmap.width_m * (w - 1)
-    row = z / heightmap.depth_m * (h - 1)
+    row = (1.0 - z / heightmap.depth_m) * (h - 1)
     return round(col), round(row)
 
 
@@ -140,8 +146,9 @@ class Preview:
                 raise ValueError(
                     f"region mask shape {m.shape} != heightmap {self.heightmap.data.shape}"
                 )
-            # Downscale the mask to the pixel size with nearest-neighbour.
-            mi = Image.fromarray((m * 255).astype(np.uint8))
+            # Flip to the image's north-up orientation, then downscale the
+            # mask to the pixel size with nearest-neighbour.
+            mi = Image.fromarray((np.flipud(m) * 255).astype(np.uint8))
             if self.size != (self.heightmap.grid_x, self.heightmap.grid_z):
                 mi = mi.resize(self.size, Image.NEAREST)
             mpx = np.asarray(mi) > 127

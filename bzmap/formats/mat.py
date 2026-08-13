@@ -1,10 +1,15 @@
 """``.MAT`` material grid reader/writer and auto-painter (docs/01 §2).
 
-The file is a plain little-endian array of ``uint16`` values, one per 20 m
-terrain tile: ``(width_m / 20) x (depth_m / 20)`` entries in row-major order
-(no zone-major trap — the MAT grid is a single flat array). Because one MAT
-tile spans 4x4 heightmap cells, the grid is ``(zonesX * 64) x (zonesZ * 64)``
-for a 256-cell (1280 m) zone.
+The file is a little-endian array of ``uint16`` values, one per 20 m terrain
+tile. **The data is zone-major, exactly like the HG2**: a sequence of 64x64
+zone blocks in row-major *zone* order; within each zone the tiles are
+row-major. (An earlier revision claimed "no zone-major trap" — that was wrong,
+and shipping a flat row-major grid scrambled the terrain textures of the first
+multi-zone map to reach the game, 2026-08-12. Verified against all 13
+multi-zone corpus MATs: the zone-major decode is seam-coherent at every 64-tile
+boundary, the flat decode is not.) Because one MAT tile spans 4x4 heightmap
+cells, the grid is ``(zonesZ * 64) x (zonesX * 64)`` for 256-cell (1280 m)
+zones; single-zone (64x64) files are identical under both layouts.
 
 Each 16-bit entry encodes a material transition for its tile:
 
@@ -39,6 +44,9 @@ from .hg2 import HEIGHT_SCALE, slope
 
 # One MAT tile spans this many heightmap cells along each axis (20 m / 5 m).
 TILE_CELLS = 4
+
+# One zone is this many MAT tiles across (1280 m / 20 m).
+ZONE_TILES = 64
 
 # One MAT tile is this many metres across.
 TILE_M = 20.0
@@ -105,19 +113,42 @@ class MaterialGrid:
         into the closest pair of dimensions (rows x cols). The grid is always
         ``(zonesZ * 64) x (zonesX * 64)``; for the common square maps this is
         exact, and for the non-square 4x3 case the closest factor pair matches
-        the map orientation.
+        the map orientation. The on-disk zone-major layout is undone here, so
+        ``data`` is world row-major (single-zone files are unaffected).
         """
         path = Path(path)
         raw = np.fromfile(path, dtype=np.uint16)
         if raw.size == 0:
             raise ValueError(f"{path}: empty MAT file")
         rows, cols = _closest_factor_pair(raw.size)
-        return cls(raw.reshape(rows, cols))
+        zz_count, zx_count = rows // ZONE_TILES, cols // ZONE_TILES
+        if rows % ZONE_TILES or cols % ZONE_TILES:
+            # Not a whole number of zones — treat as a flat grid.
+            return cls(raw.reshape(rows, cols))
+        zones = raw.reshape(zz_count, zx_count, ZONE_TILES, ZONE_TILES)
+        data = np.empty((rows, cols), dtype=np.uint16)
+        for zzi in range(zz_count):
+            for zxi in range(zx_count):
+                data[zzi * ZONE_TILES:(zzi + 1) * ZONE_TILES,
+                     zxi * ZONE_TILES:(zxi + 1) * ZONE_TILES] = zones[zzi, zxi]
+        return cls(data)
 
     def write(self, path):
-        """Write this material grid to ``path``, byte-identical to the source."""
+        """Write this material grid to ``path`` in the zone-major disk layout."""
         path = Path(path)
-        self.data.tofile(path)
+        rows, cols = self.data.shape
+        if rows % ZONE_TILES or cols % ZONE_TILES:
+            self.data.tofile(path)
+            return
+        blocks = []
+        for zzi in range(rows // ZONE_TILES):
+            for zxi in range(cols // ZONE_TILES):
+                blocks.append(np.ascontiguousarray(
+                    self.data[zzi * ZONE_TILES:(zzi + 1) * ZONE_TILES,
+                              zxi * ZONE_TILES:(zxi + 1) * ZONE_TILES]))
+        with open(path, "wb") as fh:
+            for b in blocks:
+                fh.write(b.tobytes())
 
     # -- decoding ----------------------------------------------------------
 

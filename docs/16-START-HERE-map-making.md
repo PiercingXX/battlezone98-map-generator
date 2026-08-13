@@ -50,6 +50,28 @@ broken build or a play-test.**
 8. **Lives, observer mode, vehicle swaps** run through `exu.dll` +
    shared GAMEMODE scripts, loaded from the subscribed game-mode pack.
    Do not override game-mode modules.
+9. **Every ≥256²-per-zone terrain file is ZONE-MAJOR — HG2, LGT, and `.MAT`.**
+   1280 m maps are single-zone, where layouts coincide — so a layout bug ships
+   invisibly until the FIRST multi-zone map loads in-game. Any new multi-zone
+   map deserves an in-game smoke test before iterating on content.
+10. **BZN blocks are class-layout-strict.** The engine's loader consumes a
+   class-specific field set per `[GameObject]` block; a mismatched block
+   derails the parser at the NEXT object (`GameObject "<garbage>.odf" not
+   found` → quit to lobby; a blank name at obj #0/#1 means the PLAYER block).
+   Craft need `abandoned`/`cloakState`/`cloakTrans*` (74-field layout). To
+   place a unit, clone a real block of the SAME class from a shipped map and
+   neutralize its values (`isUser=0`, empty `curPilot`). Better still: don't
+   place craft in the BZN at all — bzn-placed craft can acquire pilots at
+   load. **Truly empty craft = runtime `BuildObject(odf, 0, pos)` +
+   `RemovePilot(h)`**, host-side, which also randomizes per game.
+11. **`GetTime()` is NOT synchronized across machines in multiplayer.** Never
+   run lockstep schedules; the HOST alone owns timers and world mutations
+   (`BuildObject`/`RemoveObject`/`Attack` behind `IsHosting()`). Per-local-
+   player effects (`GetPlayerHandle` + `SetVelocity` currents) are correctly
+   left unguarded on every machine.
+12. **The game's map images are north-up: world +z at the TOP.** The in-game
+   minimap uses the per-map `.png`; render map images north-up or they ship
+   mirrored (invisible on symmetric layouts, obvious on asymmetric ones).
 
 ## The operator's calibration (learned from play-tests — treat as policy)
 
@@ -141,14 +163,28 @@ right). The tooling:
 
 Rules learned shipping the first ones:
 
-- Place ONE static object per mesh at world origin `(0,0,0)`, team 0, PrjID ==
-  the mesh stem (≤ 8 chars); the engine binds `<PrjID>.mesh` by name. Add it to
-  every variant BZN. ODF class `i76building2` (static geometry).
+- Place ONE static object per mesh, team 0, PrjID == the mesh stem
+  (≤ 8 chars); the engine binds `<PrjID>.mesh` by name. Add it to every
+  variant BZN. ODF class `i76building2` with zero heat/image/radar signatures.
+- **The carrier block must ship the environment-object profile that shipped
+  maps use** (do NOT clone the player block's defaults):
+  - transform basis `right=(7.54979e-008, 0, -1)`, `front=(1, 0, 7.54979e-008)`
+    with **mesh-local vertices = the TRANSPOSE of world coordinates**
+    (local `(wz, y, wx)`). Why: the engine applies the carrier basis and then
+    NEGATES Z — a handedness flip (det −1) no pure-rotation basis can cancel,
+    so the frame must be baked into the vertices. `meshgen` authors this
+    automatically; the debug-render reader swaps back to world space.
+  - `isVisible=1`, `seen=1`, `curHealth`/`maxHealth = 9999999`.
+  - posit `(0, 0, 0)` for water; `(0, -1, 0)` for plant fields (settles
+    billboard stem bases into the ground).
 - **Ship `.mesh`/`.material`/`.dds`** — they're in the assembler whitelist now,
   but a per-map mesh with a non-whitelisted suffix is silently dropped.
-- **Water must be `scene_blend alpha_blend`, not additive** — additive water is
-  near-invisible over dark ground. Referenced textures must ship (or be
-  base-game like `BZBase.material`, which every material imports).
+- **Water: additive blue over a scrolling ripple texture with
+  `depth_write off`** — the pass shipped maps use, and it reads as
+  transparent water. (An additive pass with no diffuse colour IS
+  near-invisible — the blue ambient/diffuse is what makes it work.)
+  Referenced textures must ship (or be base-game like `BZBase.material`,
+  which every material imports).
 - **Plants: bilinear-sample the ground and sink the base ~1.5 m** — nearest-cell
   sampling floats billboards over the engine's smooth terrain.
 - **Heightfield relief caps at ~390 m** (12-bit). A "10× deeper" trench past

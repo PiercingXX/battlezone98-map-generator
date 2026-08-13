@@ -103,7 +103,9 @@ def _water_footprint(mesh_path, heightmap):
     mask = np.zeros((gz, gx), bool)
     cell = 5.0
     for v in range(vcount):
-        px, _py, pz = struct.unpack_from("<3f", raw, di + v * 32)
+        # Mesh-local vertices are the transpose of world coordinates (x<->z)
+        # — see build_water_surface. Swap back into world space.
+        pz, _py, px = struct.unpack_from("<3f", raw, di + v * 32)
         ix, iz = int(px / cell), int(pz / cell)
         if 0 <= iz < gz and 0 <= ix < gx:
             mask[iz, ix] = True
