@@ -3,9 +3,6 @@
 An AI map-generation toolchain (**`bzmap`**) and its packaging pipeline for
 *Battlezone 98 Redux* (Steam AppID `301650`) multiplayer maps.
 
-> Built by **Skippy** from the specs in `docs/`; audited and extended in
-> operator-driven sessions.
-
 **Goal:** generate original, playable BZ98R multiplayer maps that clear a
 measurable quality bar, and package them as a standalone Steam Workshop
 expansion pack.
